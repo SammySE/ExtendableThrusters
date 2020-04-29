@@ -388,13 +388,8 @@ namespace IngameScript
                 // Current state: Unlocked, base position
                 // Target state: Unlocked, up position
 
-                // Turn upwards
-                //Program.debugoutput.WriteText($"Motor acceleration per 10 ticks: {acceleration}\n");
-                //Program.debugoutput.WriteText($"Motor target velocity atm: {Motor.TargetVelocityRad}\n", true);
-                //Program.debugoutput.WriteText($"Current distance remaining: {Math.Abs(position - Motor.Angle)}\n", true);
-                //foreach (int value in TurnMotor(-0.25f * FullCircle))
-                //    yield return value;
-                Motor.LowerLimitRad = -0.25f * FullCircle;
+                float targetPosition = -0.25f * FullCircle;
+                Motor.LowerLimitRad = targetPosition;
                 
                 // We want a negative angle.
                 // Distance to our angle is going to be difficult because: -359 = 1
@@ -404,63 +399,9 @@ namespace IngameScript
                 float distance = -0.25f * FullCircle - Motor.Angle;
                 float distanceAbs = Math.Abs(distance);
 
-                // What do we want with this distance?
-                // - calculate maximum reachable speed? Not relevant if we start reducing speed after half?
-                // - reserve a little at the end of the turn to slow down properly and carefully
-                //   - how much do we need to reserve?
-                // - monitor speed. increase deceleration if remaining distance is too little
+                // TODO find better solution for already moving rotors
 
-                // Plan
-                // 47.5% of distance speed increase (acceleration?)
-                // 47.5% of distance speed decrease, down to fixed slow speed
-                // halve speed for halved distance
-
-                // Speed increase
-                //float oneRPMinRadPerSec = FullCircle / 60; // full circle: 3.141592 * 2 = 6.283184
-                //// 1rpm = 360 degree/min = 6 degree/second = 6.283185 rad/min = 0.104720 rad/s
-                //// Target: 1 RPM after 5 seconds (translates to: 1/5 rpm/s^2; 6/5 degree/s^2 => 1.25 degree/s^2;
-                ////   (2*pi/60/5 =>) 0.020944 rad/s^2)
-                //float accelerationPerSecond = oneRPMinRadPerSec / 5;
-                //// 6 updates per second to accumulate accelerationPerSecond
-                //float acceleration = -accelerationPerSecond / 6;
-
-                //// TODO find better solution for already moving rotors
-                //Motor.TargetVelocityRad = 0.0f;
-                //// Speedup phase, wait for half distance with a bit of better braking buffer
-                //while (Math.Abs((-0.25f * FullCircle) - Motor.Angle) > (distanceAbs * 0.525))
-                //{
-                //    Program.debugoutput.WriteText($"Motor acceleration per 10 ticks: {acceleration * 180 / Math.PI}\n");
-                //    Program.debugoutput.WriteText($"Motor target velocity atm: {Motor.TargetVelocityRad * 180 / Math.PI}\n", true);
-                //    Program.debugoutput.WriteText($"Current distance remaining: {Math.Abs(-0.25f * FullCircle - Motor.Angle) * 180 / Math.PI}\n", true);
-                //    Motor.TargetVelocityRad += acceleration;
-                //    yield return 10;
-                //}
-
-                //// Wait for motor to turn to full distance
-                //while (Math.Abs((-0.25f * FullCircle) - Motor.Angle) > 0.0001)
-                //{
-                //    Program.debugoutput.WriteText("");
-                //    Debug("Motor acceleration per 10 ticks: ", acceleration);
-                //    Debug("Motor target velocity atm: ", Motor.TargetVelocityRad / 360);
-                //    Debug("Current distance remaining: ", Math.Abs(-0.25f * FullCircle - Motor.Angle));
-                //    if (Motor.TargetVelocityRad - acceleration < acceleration)
-                //        Motor.TargetVelocityRad -= acceleration;
-                //    else if (Motor.TargetVelocityRad - acceleration / 10 < acceleration / 10)
-                //        Motor.TargetVelocityRad -= acceleration / 10;
-                //    else
-                //        Motor.TargetVelocityRad = Math.Min(Motor.TargetVelocityRad - (acceleration / 100), acceleration / 100);
-                //    yield return 10;
-                //}
-                // Slow down motor to 10% for last 5%
-                //Motor.TargetVelocityRad = -0.05f * FullCircle / 60;
-                //while (Math.Abs((-0.25f * FullCircle) - Motor.Angle) > 0.0001)
-                //{
-                //    Program.debugoutput.WriteText($"Motor target velocity atm: {Motor.TargetVelocityRad}\n");
-                //    Program.debugoutput.WriteText($"Current distance remaining: {Math.Abs(-0.25f * FullCircle - Motor.Angle)}\n", true);
-                //    yield return 10;
-                //}
-
-                float maxSpeed = FullCircle * 2 / 60; // 2rpm in rad/sec
+                float maxSpeed = FullCircle * 3 / 60; // 3rpm in rad/sec
                 float minSpeed = FullCircle / 1000 / 60; // 0.001 rpm in rad/sec
                 // TRY THE SiMPLE WAY!
                 // Set speed to remaining distance every new update
@@ -469,10 +410,12 @@ namespace IngameScript
                 int updateCounterMin = 0;
                 int updateCounterStale = 0;
                 bool lastPart = false;
-                while (Math.Abs(-0.25 * FullCircle - Motor.Angle) > FullCircle / 20000)
+                float distanceLeft;
+
+                while (Math.Abs(distanceLeft = targetPosition - Motor.Angle) > FullCircle / 20000)
                 {
                     updateCounter++;
-                    float distanceLeft = (-0.25f * FullCircle) - Motor.Angle;
+                    //float distanceLeft = targetPosition - Motor.Angle;
                     Program.debugoutput.WriteText("");
                     Debug("Motor target velocity atm: ", Motor.TargetVelocityRad);
                     Debug("Current distance remaining: ", distanceLeft);
@@ -480,7 +423,7 @@ namespace IngameScript
                     Program.debugoutput.WriteText($"Time taken capped: {updateCounterMaxed / 6f} seconds\n", true);
                     Program.debugoutput.WriteText($"Time taken below 1/100 circle: {updateCounterMin / 6f} seconds\n", true);
                     Program.debugoutput.WriteText($"Time taken stale below 1/100 circle: {updateCounterStale / 6f} seconds\n", true);
-                    if (Math.Abs(distanceLeft) > maxSpeed)
+                    if (Math.Abs(distanceLeft) * 1.5f > maxSpeed)
                     {
                         Debug("Capped speed to ", Math.Sign(distanceLeft) * maxSpeed);
                         Motor.TargetVelocityRad = Math.Sign(distanceLeft) * maxSpeed;
@@ -489,10 +432,10 @@ namespace IngameScript
                     else if (Math.Abs(distanceLeft) < 0.01 * FullCircle)
                     {
                         Debug("Full speed last part. ", 0.0f);
-                        if (Motor.TargetVelocityRad < distanceLeft * 3)
+                        if (Motor.TargetVelocityRad < distanceLeft * 2)
                             lastPart = true;
                         if (lastPart)
-                            Motor.TargetVelocityRad = distanceLeft * 3;
+                            Motor.TargetVelocityRad = distanceLeft * 2;
                         else
                             updateCounterStale++;
                         updateCounterMin++;
@@ -500,7 +443,7 @@ namespace IngameScript
                     else
                     {
                         Debug("Full speed. ", 0.0f);
-                        Motor.TargetVelocityRad = distanceLeft;
+                        Motor.TargetVelocityRad = distanceLeft * 1.5f;
                         if (Math.Abs(distanceLeft * 180 / Math.PI) < 1f)
                             updateCounterMin++;
                     }
@@ -517,7 +460,7 @@ namespace IngameScript
                 {
                     Program.debugoutput.WriteText("");
                     Debug("Motor target velocity atm: ", Motor.TargetVelocityRad);
-                    Debug("Current distance remaining: ", -0.25f * FullCircle - Motor.Angle);
+                    Debug("Current distance remaining: ", targetPosition - Motor.Angle);
                     Program.debugoutput.WriteText($"Time taken: {updateCounter / 6f} seconds\n", true);
                     Program.debugoutput.WriteText($"Time taken capped: {updateCounterMaxed / 6f} seconds\n", true);
                     Program.debugoutput.WriteText($"Time taken below 1/100 circle: {updateCounterMin / 6f} seconds\n", true);
