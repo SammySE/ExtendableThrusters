@@ -401,7 +401,7 @@ namespace IngameScript
 
                 // TODO find better solution for already moving rotors
 
-                float maxSpeed = FullCircle * 5 / 60; // 5rpm in rad/sec
+                float maxSpeed = FullCircle * 3 / 60; // 5rpm in rad/sec
                 float minSpeed = FullCircle / 1000 / 60; // 0.001 rpm in rad/sec
                 // TRY THE SiMPLE WAY!
                 // Set speed to remaining distance every new update
@@ -411,8 +411,15 @@ namespace IngameScript
                 int updateCounterStale = 0;
                 float distanceLeft;
                 float maxAcceleration = 0; // acceleration in rad/sec
-                int maxAccelerationObservation = 2; // duration of observation of acceleration in units of 10 ticks
+                int maxAccelerationObservation = 6; // duration of observation of acceleration in units of 10 ticks
                 float startAngle = Motor.Angle;
+
+                // Measure initial acceleration
+                // Calculate distance needed for braking
+                // Brake in time
+                // Possibly: Give desired turn time or speed, and adjust forces of rotor to match this (smooth turning)
+                // Take into account: 1/6 second may be too big of a time frame for deciding to brake upon measurement at certain speeds.
+                //     Initiate braking procedure with less torque, but earlier, to match the goal.
 
                 // Go max speed while more than 2 seconds of rotation remain
                 while (Math.Abs(distanceLeft = targetPosition - Motor.Angle) > maxSpeed)
@@ -432,7 +439,12 @@ namespace IngameScript
                     Motor.TargetVelocityRad = Math.Sign(distanceLeft) * maxSpeed;
 
                     if (updateCounter - 1 == maxAccelerationObservation)
-                        maxAcceleration = Math.Abs(Motor.Angle - startAngle) / maxAccelerationObservation * 6;
+                    {
+                        float s = Math.Abs(Motor.Angle - startAngle);
+                        float t = maxAccelerationObservation;
+                        float a = 2 * s / (t * t); // rad / 10ticks^2
+                        maxAcceleration = (float) Math.Pow(Math.Sqrt(a) * 6, 2); // rad / s^2
+                    }
                     yield return 10;
                 }
 
