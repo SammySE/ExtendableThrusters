@@ -401,7 +401,7 @@ namespace IngameScript
 
                 // TODO find better solution for already moving rotors
 
-                float maxSpeed = FullCircle * 3 / 60; // 3rpm in rad/sec
+                float maxSpeed = FullCircle * 5 / 60; // 5rpm in rad/sec
                 float minSpeed = FullCircle / 1000 / 60; // 0.001 rpm in rad/sec
                 // TRY THE SiMPLE WAY!
                 // Set speed to remaining distance every new update
@@ -409,51 +409,88 @@ namespace IngameScript
                 int updateCounterMaxed = 0;
                 int updateCounterMin = 0;
                 int updateCounterStale = 0;
-                bool lastPart = false;
                 float distanceLeft;
+                float maxAcceleration = 0; // acceleration in rad/sec
+                int maxAccelerationObservation = 2; // duration of observation of acceleration in units of 10 ticks
+                float startAngle = Motor.Angle;
 
-                while (Math.Abs(distanceLeft = targetPosition - Motor.Angle) > FullCircle / 20000)
+                // Go max speed while more than 2 seconds of rotation remain
+                while (Math.Abs(distanceLeft = targetPosition - Motor.Angle) > maxSpeed)
                 {
                     updateCounter++;
-                    //float distanceLeft = targetPosition - Motor.Angle;
+                    updateCounterMaxed++;
                     Program.debugoutput.WriteText("");
                     Debug("Motor target velocity atm: ", Motor.TargetVelocityRad);
                     Debug("Current distance remaining: ", distanceLeft);
+                    Debug("Max. acceleration: ", maxAcceleration);
                     Program.debugoutput.WriteText($"Time taken: {updateCounter / 6f} seconds\n", true);
                     Program.debugoutput.WriteText($"Time taken capped: {updateCounterMaxed / 6f} seconds\n", true);
                     Program.debugoutput.WriteText($"Time taken below 1/100 circle: {updateCounterMin / 6f} seconds\n", true);
                     Program.debugoutput.WriteText($"Time taken stale below 1/100 circle: {updateCounterStale / 6f} seconds\n", true);
-                    if (Math.Abs(distanceLeft) * 1.5f > maxSpeed)
-                    {
-                        Debug("Capped speed to ", Math.Sign(distanceLeft) * maxSpeed);
-                        Motor.TargetVelocityRad = Math.Sign(distanceLeft) * maxSpeed;
-                        updateCounterMaxed++;
-                    }
-                    else if (Math.Abs(distanceLeft) < 0.01 * FullCircle)
-                    {
-                        Debug("Full speed last part. ", 0.0f);
-                        if (Motor.TargetVelocityRad < distanceLeft * 2)
-                            lastPart = true;
-                        if (lastPart)
-                            Motor.TargetVelocityRad = distanceLeft * 2;
-                        else
-                            updateCounterStale++;
-                        updateCounterMin++;
-                    }
-                    else
-                    {
-                        Debug("Full speed. ", 0.0f);
-                        Motor.TargetVelocityRad = distanceLeft * 1.5f;
-                        if (Math.Abs(distanceLeft * 180 / Math.PI) < 1f)
-                            updateCounterMin++;
-                    }
+                    Debug("Capped speed to ", Math.Sign(distanceLeft) * maxSpeed);
+
+                    Motor.TargetVelocityRad = Math.Sign(distanceLeft) * maxSpeed;
+
+                    if (updateCounter - 1 == maxAccelerationObservation)
+                        maxAcceleration = Math.Abs(Motor.Angle - startAngle) / maxAccelerationObservation * 6;
                     yield return 10;
                 }
 
-                //Program.debugoutput.WriteText("");
-                //Debug("Motor target velocity atm: ", Motor.TargetVelocityRad);
-                //Debug("Current distance remaining: ", -0.25f * FullCircle - Motor.Angle);
-                //Program.debugoutput.WriteText("Locked.", true);
+                // Go "normal" speed while more than 1/100th of a full circle is left (speed = remaining rotation in one second)
+                while (Math.Abs(distanceLeft = targetPosition - Motor.Angle) > 0.01 * FullCircle)
+                {
+                    updateCounter++;
+                    if (Math.Abs(distanceLeft * 180 / Math.PI) < 1f)
+                        updateCounterMin++;
+                    Program.debugoutput.WriteText("");
+                    Debug("Motor target velocity atm: ", Motor.TargetVelocityRad);
+                    Debug("Current distance remaining: ", distanceLeft);
+                    Debug("Max. acceleration: ", maxAcceleration);
+                    Program.debugoutput.WriteText($"Time taken: {updateCounter / 6f} seconds\n", true);
+                    Program.debugoutput.WriteText($"Time taken capped: {updateCounterMaxed / 6f} seconds\n", true);
+                    Program.debugoutput.WriteText($"Time taken below 1/100 circle: {updateCounterMin / 6f} seconds\n", true);
+                    Program.debugoutput.WriteText($"Time taken stale below 1/100 circle: {updateCounterStale / 6f} seconds\n", true);
+                    Debug("Normal speed. ", 0.0f);
+
+                    Motor.TargetVelocityRad = distanceLeft;
+                    yield return 10;
+                }
+
+                // Stop decreasing speed until we'd be done within 0.5 seconds
+                //while (Math.Abs(distanceLeft = targetPosition - Motor.Angle) > 0.01 * FullCircle)
+                //while ((targetPosition - Motor.Angle) * 2 > Motor.TargetVelocityRad)
+                //{
+                //    updateCounter++;
+                //    updateCounterMin++;
+                //    updateCounterStale++;
+                //    yield return 10;
+                //}
+
+                //updateCounter++;
+                //updateCounterMin++;
+                //updateCounterStale++;
+                //yield return 10;
+
+                // Finish rotation with double "normal" speed with precision of 1/20000th of a full circle (0.018 degree)
+                while (Math.Abs(distanceLeft = targetPosition - Motor.Angle) > FullCircle / 20000)
+                {
+                    updateCounter++;
+                    updateCounterMin++;
+                    Program.debugoutput.WriteText("");
+                    Debug("Motor target velocity atm: ", Motor.TargetVelocityRad);
+                    Debug("Current distance remaining: ", distanceLeft);
+                    Debug("Max. acceleration: ", maxAcceleration);
+                    Program.debugoutput.WriteText($"Time taken: {updateCounter / 6f} seconds\n", true);
+                    Program.debugoutput.WriteText($"Time taken capped: {updateCounterMaxed / 6f} seconds\n", true);
+                    Program.debugoutput.WriteText($"Time taken below 1/100 circle: {updateCounterMin / 6f} seconds\n", true);
+                    Program.debugoutput.WriteText($"Time taken stale below 1/100 circle: {updateCounterStale / 6f} seconds\n", true);
+                    Debug("Double speed last part. ", 0.0f);
+
+                    if (Motor.TargetVelocityRad > distanceLeft * 2) updateCounterStale++;
+                    Motor.TargetVelocityRad = Math.Max(Motor.TargetVelocityRad, distanceLeft * 2);
+                    yield return 10;
+                }
+
                 Motor.TargetVelocityRad = 0.0f;
                 //Motor.RotorLock = true;
                 while (true)
@@ -461,6 +498,7 @@ namespace IngameScript
                     Program.debugoutput.WriteText("");
                     Debug("Motor target velocity atm: ", Motor.TargetVelocityRad);
                     Debug("Current distance remaining: ", targetPosition - Motor.Angle);
+                    Debug("Max. acceleration: ", maxAcceleration);
                     Program.debugoutput.WriteText($"Time taken: {updateCounter / 6f} seconds\n", true);
                     Program.debugoutput.WriteText($"Time taken capped: {updateCounterMaxed / 6f} seconds\n", true);
                     Program.debugoutput.WriteText($"Time taken below 1/100 circle: {updateCounterMin / 6f} seconds\n", true);
